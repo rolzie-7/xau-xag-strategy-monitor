@@ -32,10 +32,18 @@ A detailed comparison blog post will be published later and linked here.
 
 ---
 
-## Quick Start
+Run the Trade Alert Dashboard (Streamlit)
 
-### 1) Create a virtual environment (recommended)
-```bash
-python -m venv .venv
-# Windows PowerShell:
-.venv\Scripts\Activate.ps1
+From the repository root:
+
+cd trade_alert
+streamlit run app.py
+
+
+The dashboard can:
+
+Generate a manual order ticket (entry / stop / TP1 / TP)
+
+Let you input your actual fill price
+
+Track the position and update the latest stop level in real time (ATR trailing)

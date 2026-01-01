@@ -66,40 +66,63 @@ class DukascopyM5Fetcher:
         return LiveDataSnapshot(symbol=self.symbol, tz=self.tz, m5=df)
 
     def _initial_fetch(self) -> pd.DataFrame:
-        end_utc = datetime.now(timezone.utc)
-        start_utc = end_utc - timedelta(days=self.lookback_days)
+        """
+        Initial load: fetch last N days (UTC-naive expected by dukascopy_python)
+        """
+        try:
+            end_utc = datetime.now(timezone.utc).replace(tzinfo=None)
+            start_utc = (datetime.now(timezone.utc) - timedelta(days=self.lookback_days)).replace(tzinfo=None)
 
-        df = duka.fetch(
-            self.instrument,
-            self.interval,
-            self.side,
-            start_utc.replace(tzinfo=None),  # naive UTC expected by dukascopy_python
-            end_utc.replace(tzinfo=None),
-        )
+            df = duka.fetch(
+                self.instrument,
+                self.interval,
+                self.side,
+                start_utc,
+                end_utc,
+            )
+
+        except IndexError:
+            # Dukascopy empty update bug can also happen here
+            print(f"[{self.symbol}] Dukascopy empty update (initial), skip")
+            return pd.DataFrame()
+
+        except Exception as e:
+            print(f"[{self.symbol}] initial fetch error:", e)
+            return pd.DataFrame()
+
         if df is None or df.empty:
             return pd.DataFrame()
 
         df = df.sort_index()
-        # Index -> UTC aware -> local tz
         idx = pd.to_datetime(df.index, utc=True).tz_convert(self.tz)
         df = df.copy()
         df.index = idx
-        return df.sort_index()
+        return df
 
     def _poll_fetch(self, last_ts_local: pd.Timestamp) -> pd.DataFrame:
-        # fetch from last_ts_utc - small overlap to be safe (dedupe later)
-        last_utc = last_ts_local.tz_convert("UTC")
-        start_utc = (last_utc - pd.Timedelta(minutes=10)).to_pydatetime().replace(tzinfo=None)
+        try:
+            # fetch from last_ts_utc - small overlap to be safe (dedupe later)
+            last_utc = last_ts_local.tz_convert("UTC")
+            start_utc = (last_utc - pd.Timedelta(minutes=10)).to_pydatetime().replace(tzinfo=None)
+            end_utc = datetime.now(timezone.utc).replace(tzinfo=None)
 
-        end_utc = datetime.now(timezone.utc).replace(tzinfo=None)
+            df = duka.fetch(
+                self.instrument,
+                self.interval,
+                self.side,
+                start_utc,
+                end_utc,
+            )
 
-        df = duka.fetch(
-            self.instrument,
-            self.interval,
-            self.side,
-            start_utc,
-            end_utc,
-        )
+        except IndexError:
+            # Dukascopy empty update bug
+            print(f"[{self.symbol}] Dukascopy empty update (poll), skip")
+            return pd.DataFrame()
+
+        except Exception as e:
+            print(f"[{self.symbol}] Dukascopy fetch error:", e)
+            return pd.DataFrame()
+
         if df is None or df.empty:
             return pd.DataFrame()
 

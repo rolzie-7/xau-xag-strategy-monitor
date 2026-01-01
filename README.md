@@ -27,6 +27,8 @@ This repo is split into two parts:
 - Persist trades & PnL into **SQLite** (data survives restarts)
 - Track closed-trade PnL and build an equity curve from recorded history
 
+---
+
 ## Quick Start (Trade Alert Dashboard)
 
 From the repository root:
@@ -34,16 +36,3 @@ From the repository root:
 ```bash
 cd trade_alert
 streamlit run app.py
----
-
-## Repository Layout
-
-```text
-.
-├── backtest/                 # Research + backtesting experiments
-└── trade_alert/              # Streamlit app + trade tracking
-    ├── app.py                # Streamlit dashboard
-    ├── trade_db.py           # SQLite persistence layer (schema + CRUD)
-    └── ...                   # helpers / advisors / fetchers (if any)
-
-

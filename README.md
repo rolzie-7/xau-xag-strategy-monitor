@@ -8,6 +8,7 @@ This repository contains:
 - `trade_alert/`: a lightweight web dashboard that provides **manual trade tickets** (SL/TP) and **live stop updates** for ATR-based trailing strategies.
 
 > Note: This project is designed for education and research. It is **not** financial advice.
+<img width="1903" height="992" alt="image" src="https://github.com/user-attachments/assets/bba8cc4f-77c5-4cfe-b875-f5ecf2808958" />
 
 ---
 

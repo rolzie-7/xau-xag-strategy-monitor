@@ -200,76 +200,110 @@ def main():
 
         fill_side = st.selectbox("Filled side", ["LONG", "SHORT"], key="fill_side")
         fill_price = st.number_input("Fill price", value=0.0, step=0.01, format="%.5f")
-
-        # ✅ NEW: choose currency, convert to USD then compute qty
-        notional_ccy = st.selectbox("Notional currency", ["USD", "GBP"], index=0)
-        notional_ccy_amount = st.number_input(
-            f"Bought notional ({notional_ccy})",
-            value=100.0,
-            min_value=0.0,
-            step=10.0,
+        size_mode = st.radio(
+            "Position sizing input",
+            ["By notional", "By quantity"],
+            horizontal=True,
         )
 
         fx_manual = False
         fx_to_usd = 1.0
         fx_error = None
 
-        if notional_ccy != "USD":
-            fx_manual = st.checkbox("Manual FX override (if API fails)", value=False)
-            if fx_manual:
-                fx_to_usd = st.number_input(f"FX rate (1 {notional_ccy} = ? USD)", value=1.25, min_value=0.0001, step=0.01)
-            else:
-                try:
-                    fx_to_usd = float(get_fx_to_usd(notional_ccy))
-                except Exception as e:
-                    fx_error = str(e)
-                    fx_to_usd = 0.0
+        # Defaults so variables always exist
+        notional_ccy = "USD"
+        notional_ccy_amount = 0.0
+        notional_usd = 0.0
+        qty = 0.0
 
-        if fx_error:
-            st.warning(f"FX auto fetch failed: {fx_error}")
-            st.info("Tick 'Manual FX override' and input a rate, or switch currency to USD.")
+        if size_mode == "By notional":
+            # ✅ Existing path (with FX)
+            notional_ccy = st.selectbox("Notional currency", ["USD", "GBP"], index=0)
+            notional_ccy_amount = st.number_input(
+                f"Bought notional ({notional_ccy})",
+                value=100.0,
+                min_value=0.0,
+                step=10.0,
+            )
 
-        notional_usd = float(notional_ccy_amount) * float(fx_to_usd) if notional_ccy_amount and fx_to_usd else 0.0
-        qty = (float(notional_usd) / float(fill_price)) if fill_price and fill_price > 0 and notional_usd > 0 else 0.0
-
-        st.caption(
-            f"FX used: 1 {notional_ccy} = {fx_to_usd:.6f} USD  |  "
-            f"notional_usd = ${notional_usd:.2f}  |  qty ≈ {qty:.6f}"
-        )
-
-        start_btn = st.button("Start tracking this position")
-
-        if start_btn:
-            if df.empty:
-                st.error("Need live data first.")
-            elif fill_price <= 0:
-                st.error("Need a valid fill price.")
-            elif notional_ccy_amount <= 0:
-                st.error("Notional must be > 0.")
-            elif notional_ccy != "USD" and (fx_to_usd is None or fx_to_usd <= 0):
-                st.error("FX rate invalid. Use manual override.")
-            else:
-                now_ts = df.index.max()
-                try:
-                    if strategy_name.startswith("FixedRR"):
-                        pos = fixed_rr.start_position(sym, df, fill_side, float(fill_price), now_ts)
-                    else:
-                        pos = scale_out.start_position(sym, df, fill_side, float(fill_price), now_ts)
-
-                    tp = TrackedPosition(
-                        track_id=str(uuid4()),
-                        pos=pos,
-                        qty=float(qty),
-                        notional_usd=float(notional_usd),
-                        notional_ccy=str(notional_ccy),
-                        notional_ccy_amount=float(notional_ccy_amount),
-                        fx_to_usd=float(fx_to_usd),
+            if notional_ccy != "USD":
+                fx_manual = st.checkbox("Manual FX override (if API fails)", value=False)
+                if fx_manual:
+                    fx_to_usd = st.number_input(
+                        f"FX rate (1 {notional_ccy} = ? USD)",
+                        value=1.25,
+                        min_value=0.0001,
+                        step=0.01,
                     )
-                    st.session_state["tracked_positions"].append(tp)
-                    st.success("Tracking started.")
-                    st.rerun()
-                except Exception as e:
-                    st.error(str(e))
+                else:
+                    try:
+                        fx_to_usd = float(get_fx_to_usd(notional_ccy))
+                    except Exception as e:
+                        fx_error = str(e)
+                        fx_to_usd = 0.0
+
+            if fx_error:
+                st.warning(f"FX auto fetch failed: {fx_error}")
+                st.info("Tick 'Manual FX override' and input a rate, or switch currency to USD.")
+
+            notional_usd = float(notional_ccy_amount) * float(fx_to_usd) if notional_ccy_amount and fx_to_usd else 0.0
+            qty = (float(notional_usd) / float(fill_price)) if fill_price and fill_price > 0 and notional_usd > 0 else 0.0
+
+        else:
+            # ✅ New path: user enters exact broker quantity
+            qty = st.number_input(
+                "Quantity bought",
+                value=0.01,
+                min_value=0.0,
+                step=0.01,
+                format="%.6f",
+            )
+
+            notional_usd = float(qty) * float(fill_price) if fill_price and fill_price > 0 and qty > 0 else 0.0
+            notional_ccy = "USD"
+            notional_ccy_amount = float(notional_usd)
+            fx_to_usd = 1.0
+
+    # ✅ Updated caption (works for both modes)
+    st.caption(
+        f"Mode: {size_mode} | "
+        f"FX used: 1 {notional_ccy} = {fx_to_usd:.6f} USD  |  "
+        f"notional_usd = ${notional_usd:.2f}  |  qty ≈ {qty:.6f}"
+    )
+
+    start_btn = st.button("Start tracking this position")
+
+    if start_btn:
+        if df.empty:
+            st.error("Need live data first.")
+        elif fill_price <= 0:
+            st.error("Need a valid fill price.")
+        elif qty <= 0:
+            st.error("Quantity must be > 0.")
+        elif size_mode == "By notional" and notional_ccy != "USD" and (fx_to_usd is None or fx_to_usd <= 0):
+            st.error("FX rate invalid. Use manual override.")
+        else:
+            now_ts = df.index.max()
+            try:
+                if strategy_name.startswith("FixedRR"):
+                    pos = fixed_rr.start_position(sym, df, fill_side, float(fill_price), now_ts)
+                else:
+                    pos = scale_out.start_position(sym, df, fill_side, float(fill_price), now_ts)
+    
+                tp = TrackedPosition(
+                    track_id=str(uuid4()),
+                    pos=pos,
+                    qty=float(qty),
+                    notional_usd=float(notional_usd),
+                    notional_ccy=str(notional_ccy),
+                    notional_ccy_amount=float(notional_ccy_amount),
+                    fx_to_usd=float(fx_to_usd),
+                )
+                st.session_state["tracked_positions"].append(tp)
+                st.success("Tracking started.")
+                st.rerun()
+            except Exception as e:
+                st.error(str(e))
 
     st.divider()
     st.subheader("Active positions (auto-updated)")

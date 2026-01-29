@@ -19,7 +19,7 @@ USE_CACHE = True
 INITIAL_CAPITAL = 100.0
 
 # Try in order; first time that has a valid signal will be used
-ENTRY_TIMES = ["23:30", "08:30"]
+ENTRY_TIMES = ["08:00"]
 
 # Flatten at 16:00 London time:
 # - if entry <= 16:00 => same day 16:00
